@@ -43,9 +43,25 @@ var text = `Как видите, он  спускается  по  лестни�
 	посидеть у огня и послушать какую-нибудь интересную сказку.
 		В этот вечер...`
 
+var shortText = `w1 W1 w3 w4 w5  w2  w2 	w3 w3
+w4 w4		w5		w4
+w5 w5 w5 W5`
+
+var equalFrequencyText = `a a a b b b c c c d d d e e e f f f g g g h h h k k k j j j i i i`
+
 func TestTop10(t *testing.T) {
 	t.Run("no words in empty string", func(t *testing.T) {
 		require.Len(t, Top10(""), 0)
+	})
+
+	t.Run("less than 10 words in text", func(t *testing.T) {
+		expected := []string{"w5", "w4", "w3", "w2", "W1", "W5", "w1"}
+		require.Equal(t, expected, Top10(shortText))
+	})
+
+	t.Run("alphabetic sort on equal count", func(t *testing.T) {
+		expected := []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j"}
+		require.Equal(t, expected, Top10(equalFrequencyText))
 	})
 
 	t.Run("positive test", func(t *testing.T) {
