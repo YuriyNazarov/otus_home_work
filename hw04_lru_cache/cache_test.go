@@ -54,27 +54,29 @@ func TestCache(t *testing.T) {
 		c.Set("key1", 1)
 		c.Set("key2", 2)
 		c.Set("key3", 3)
-		//key3, key2
+		// key3, key2
 		val, ok := c.Get("key1") // проверка выталкивания по очереди добавления
 		require.False(t, ok)
 		require.Nil(t, val)
 
 		val, ok = c.Get("key2") // проверка выталкивания по очереди запроса
 		// key2, key3
+		require.True(t, ok)
+		require.Equal(t, val, 2)
 		c.Set("key4", 4)
-		//key4, key2
+		// key4, key2
 		val, ok = c.Get("key3")
 		require.False(t, ok)
 		require.Nil(t, val)
 
 		c.Set("key2", 22) // проверка обновления значения и выталкивания по очереди обновлнеия
-		//key2, key4
+		// key2, key4
 		val, ok = c.Get("key2")
 		require.True(t, ok)
 		require.Equal(t, val, 22)
 		c.Set("key4", 44)
 		c.Set("key5", 5)
-		//key5, key4
+		// key5, key4
 		val, ok = c.Get("key2")
 		require.False(t, ok)
 		require.Nil(t, val)
@@ -85,7 +87,7 @@ func TestCache(t *testing.T) {
 		c.Set("key1", 1)
 		c.Set("key2", 2)
 		c.Set("key3", 3)
-		//key3, key2, key1
+		// key3, key2, key1
 
 		c.Clear()
 		val, ok := c.Get("key1")

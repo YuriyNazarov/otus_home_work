@@ -58,6 +58,5 @@ func TestList(t *testing.T) {
 		l.PushBack(1)
 		require.Equal(t, 1, l.Front().Value.(int))
 		require.Equal(t, 1, l.Back().Value.(int))
-
 	})
 }

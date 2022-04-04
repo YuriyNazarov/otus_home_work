@@ -40,16 +40,15 @@ func (c *lruCache) Set(key Key, value interface{}) bool {
 		element.Value = newCacheValue
 		c.queue.MoveToFront(element)
 		return true
-	} else {
-		if c.queue.Len() >= c.capacity {
-			cacheElement := c.queue.Back().Value.(cacheItem)
-			delete(c.items, cacheElement.key)
-			c.queue.Remove(c.queue.Back())
-		}
-		c.queue.PushFront(newCacheValue)
-		c.items[key] = c.queue.Front()
-		return false
 	}
+	if c.queue.Len() >= c.capacity {
+		cacheElement := c.queue.Back().Value.(cacheItem)
+		delete(c.items, cacheElement.key)
+		c.queue.Remove(c.queue.Back())
+	}
+	c.queue.PushFront(newCacheValue)
+	c.items[key] = c.queue.Front()
+	return false
 }
 
 func (c *lruCache) Get(key Key) (interface{}, bool) {

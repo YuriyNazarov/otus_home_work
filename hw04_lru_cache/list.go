@@ -77,13 +77,14 @@ func (l *list) Remove(i *ListItem) {
 		l.first = nil
 		l.last = nil
 	} else {
-		if i.Next == nil { // это последний элт списка
+		switch {
+		case i.Next == nil:
 			l.last = i.Prev
 			i.Prev.Next = nil
-		} else if i.Prev == nil { // первый элт списка
+		case i.Prev == nil:
 			l.first = i.Next
 			i.Next.Prev = nil
-		} else {
+		default:
 			i.Next.Prev = i.Prev
 			i.Prev.Next = i.Next
 		}
