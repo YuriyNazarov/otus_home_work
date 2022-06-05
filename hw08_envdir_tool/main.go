@@ -1,5 +1,16 @@
 package main
 
+import (
+	"os"
+)
+
 func main() {
-	// Place your code here.
+	args := os.Args
+	envDir := args[1]
+	command := args[2:]
+	env, err := ReadDir(envDir)
+	if err != nil {
+		panic(err)
+	}
+	os.Exit(RunCmd(command, env))
 }
