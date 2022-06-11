@@ -30,22 +30,22 @@ func ReadDir(dir string) (Environment, error) {
 		if err != nil {
 			return nil, err
 		}
+		defer file.Close()
 		if fileInfo.Size() == 0 {
 			env[fileInfo.Name()] = EnvValue{
 				Value:      "",
 				NeedRemove: true,
 			}
-		} else {
-			contents, err := getFirstLine(file, fileInfo.Size())
-			if err != nil {
-				return nil, err
-			}
-			env[fileInfo.Name()] = EnvValue{
-				Value:      contents,
-				NeedRemove: false,
-			}
+			continue
 		}
-		file.Close()
+		contents, err := getFirstLine(file, fileInfo.Size())
+		if err != nil {
+			return nil, err
+		}
+		env[fileInfo.Name()] = EnvValue{
+			Value:      contents,
+			NeedRemove: false,
+		}
 	}
 
 	return env, nil

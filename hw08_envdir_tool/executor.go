@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"syscall"
@@ -30,7 +31,7 @@ func RunCmd(cmd []string, env Environment) (returnCode int) {
 				return status.ExitStatus()
 			}
 		} else {
-			panic(err)
+			fmt.Println("error occupied while executing command", err)
 		}
 	}
 	return 0
