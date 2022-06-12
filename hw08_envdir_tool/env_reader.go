@@ -2,8 +2,8 @@ package main
 
 import (
 	"io"
-	"io/ioutil"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -20,17 +20,21 @@ type EnvValue struct {
 // ReadDir reads a specified directory and returns map of env variables.
 // Variables represented as files where filename is name of variable, file first line is a value.
 func ReadDir(dir string) (Environment, error) {
-	envFiles, err := ioutil.ReadDir(dir)
+	envFiles, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, err
 	}
 	env := make(Environment)
-	for _, fileInfo := range envFiles {
-		file, err := os.Open(dir + "/" + fileInfo.Name())
+	for _, file := range envFiles {
+		file, err := os.Open(filepath.Join(dir, file.Name()))
 		if err != nil {
 			return nil, err
 		}
 		defer file.Close()
+		fileInfo, err := file.Stat()
+		if err != nil {
+			return nil, err
+		}
 		if fileInfo.Size() == 0 {
 			env[fileInfo.Name()] = EnvValue{
 				Value:      "",
