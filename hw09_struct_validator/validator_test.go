@@ -4,8 +4,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/stretchr/testify/require"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 type UserRole string
@@ -68,23 +69,23 @@ func TestValidate(t *testing.T) {
 			expectedErr: ValidationErrors{
 				{
 					Field: "ID",
-					Err:   invalidLenError,
+					Err:   ErrInvalidLen,
 				},
 				{
 					Field: "Age",
-					Err:   greaterMaxError,
+					Err:   ErrGreaterMax,
 				},
 				{
 					Field: "Email",
-					Err:   regexpValidationError,
+					Err:   ErrRegExpMismatch,
 				},
 				{
 					Field: "Role",
-					Err:   notInSetError,
+					Err:   ErrNotInSet,
 				},
 				{
 					Field: "Phones[0]",
-					Err:   invalidLenError,
+					Err:   ErrInvalidLen,
 				},
 			},
 		},
@@ -97,7 +98,7 @@ func TestValidate(t *testing.T) {
 			expectedErr: ValidationErrors{
 				{
 					Field: "Version",
-					Err:   invalidLenError,
+					Err:   ErrInvalidLen,
 				},
 			},
 		},
@@ -117,7 +118,7 @@ func TestValidate(t *testing.T) {
 			expectedErr: ValidationErrors{
 				{
 					Field: "Code",
-					Err:   notInSetError,
+					Err:   ErrNotInSet,
 				},
 			},
 		},
@@ -126,15 +127,15 @@ func TestValidate(t *testing.T) {
 				Num:  []int{1, 2, 3, 4, 5},
 				Num1: 2,
 			},
-			expectedErr: ruleError,
+			expectedErr: ErrInvalidRule,
 		},
 		{
 			in:          Wrong{Num: 1},
-			expectedErr: typeError,
+			expectedErr: ErrWrongType,
 		},
 		{
 			in:          "validate this",
-			expectedErr: valueError,
+			expectedErr: ErrNotStruct,
 		},
 	}
 
@@ -144,7 +145,12 @@ func TestValidate(t *testing.T) {
 			t.Parallel()
 			result := Validate(tt.in)
 			if tt.expectedErr != nil {
-				require.True(t, errors.Is(result, tt.expectedErr))
+				var valErr ValidationErrors
+				if errors.As(result, &valErr) {
+					require.Equal(t, tt.expectedErr, result)
+				} else {
+					require.True(t, errors.Is(result, tt.expectedErr))
+				}
 			} else {
 				require.Nil(t, result)
 			}

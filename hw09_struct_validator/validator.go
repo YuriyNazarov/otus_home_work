@@ -16,16 +16,20 @@ type ValidationError struct {
 
 type ValidationErrors []ValidationError
 
-var (
-	valueError = errors.New("input is not a struct")
-	ruleError  = errors.New("invalid validation rule")
-	typeError  = errors.New("rule unavailable for this field type")
+type intCheckFn func(int, int) bool
 
-	invalidLenError       = errors.New("string len is not valid")
-	notInSetError         = errors.New("value is not in validated set")
-	lessMinError          = errors.New("value is less than minimal")
-	greaterMaxError       = errors.New("value is greater than maximal")
-	regexpValidationError = errors.New("value does not match regular expression")
+type validationFn func(ruleVal string, val reflect.Value, name string) error
+
+var (
+	ErrNotStruct   = errors.New("input is not a struct")
+	ErrInvalidRule = errors.New("invalid validation rule")
+	ErrWrongType   = errors.New("rule unavailable for this field type")
+
+	ErrInvalidLen     = errors.New("string len is not valid")
+	ErrNotInSet       = errors.New("value is not in validated set")
+	ErrLessMin        = errors.New("value is less than minimal")
+	ErrGreaterMax     = errors.New("value is greater than maximal")
+	ErrRegExpMismatch = errors.New("value does not match regular expression")
 )
 
 func (v ValidationErrors) Error() string {
@@ -39,32 +43,26 @@ func (v ValidationErrors) Error() string {
 func Validate(v interface{}) error {
 	vVal := reflect.ValueOf(v)
 	if vVal.Kind() != reflect.Struct {
-		return valueError
+		return ErrNotStruct
 	}
 	vType := reflect.TypeOf(v)
 	var errList ValidationErrors
 	for i := 0; i < vType.NumField(); i++ {
 		field := vType.Field(i)
-		validationTag, ok := field.Tag.Lookup("validate")
-		if ok {
-			if validationTag != "" {
-				// разобьем правила валидации - на случай объединенных через "|"
-				rules := strings.Split(validationTag, "|")
-				for ri := 0; ri < len(rules); ri++ {
-					err := validateField(rules[ri], vVal.Field(i), field.Name)
-					var valErr ValidationErrors
-					if err != nil {
-						if errors.As(err, &valErr) {
-							errList = append(errList, valErr...)
-						} else {
-							return err
-						}
+		rules := getValidationRules(field.Tag)
+		if len(rules) > 0 {
+			for ri := 0; ri < len(rules); ri++ {
+				err := validateField(rules[ri], vVal.Field(i), field.Name)
+				var valErr ValidationErrors
+				if err != nil {
+					if errors.As(err, &valErr) {
+						errList = append(errList, valErr...)
+					} else {
+						return err
 					}
 				}
 			}
-			continue
 		}
-		continue
 	}
 
 	if len(errList) > 0 {
@@ -73,13 +71,23 @@ func Validate(v interface{}) error {
 	return nil
 }
 
+func getValidationRules(tag reflect.StructTag) (rules []string) {
+	validationTag, ok := tag.Lookup("validate")
+	if ok {
+		if validationTag != "" {
+			rules = strings.Split(validationTag, "|")
+		}
+	}
+	return
+}
+
 func validateField(rules string, val reflect.Value, name string) error {
 	rulesData := strings.Split(rules, ":")
 	if len(rulesData) != 2 {
-		return fmt.Errorf("field %s: %w", name, ruleError)
+		return fmt.Errorf("field %s: %w", name, ErrInvalidRule)
 	}
 	if rulesData[1] == "" {
-		return fmt.Errorf("field %s: %w", name, ruleError)
+		return fmt.Errorf("field %s: %w", name, ErrInvalidRule)
 	}
 
 	switch rulesData[0] {
@@ -95,76 +103,50 @@ func validateField(rules string, val reflect.Value, name string) error {
 		return tryMaxRule(rulesData[1], val, name)
 	}
 
-	return fmt.Errorf("field %s: %w", name, ruleError)
+	return fmt.Errorf("field %s: %w", name, ErrInvalidRule)
 }
 
 func tryLenRule(ruleVal string, val reflect.Value, name string) error {
-	var errs ValidationErrors
-	if val.Type().Kind() == reflect.Slice {
-		for i := 0; i < val.Len(); i++ {
-			err := tryLenRule(ruleVal, val.Index(i), name+"["+strconv.Itoa(i)+"]")
-			var valErr ValidationErrors
-			if err != nil {
-				if errors.As(err, &valErr) {
-					errs = append(errs, valErr...)
-				} else {
-					return err
-				}
-			}
-		}
-		if len(errs) > 0 {
-			return errs
-		}
-	} else if val.Type().Kind() == reflect.String {
+	switch val.Type().Kind() { //nolint:exhaustive
+	case reflect.Slice:
+		return validateSlice(ruleVal, val, name, tryLenRule)
+	case reflect.String:
 		strLen, err := strconv.Atoi(ruleVal)
 		if err != nil {
-			return fmt.Errorf("field %s: %w caused by %s", name, ruleError, err)
+			return fmt.Errorf("field %s: %w caused by %s", name, ErrInvalidRule, err)
 		}
 		if val.Len() != strLen {
 			return ValidationErrors{ValidationError{
 				Field: name,
-				Err:   invalidLenError,
+				Err:   ErrInvalidLen,
 			}}
 		}
-	} else {
-		return fmt.Errorf("field %s: %w", name, typeError)
+	default:
+		return fmt.Errorf("field %s: %w", name, ErrWrongType)
 	}
 
 	return nil
 }
 
 func tryInRule(ruleVal string, val reflect.Value, name string) error {
-	var errs ValidationErrors
-	if val.Type().Kind() == reflect.Slice {
-		for i := 0; i < val.Len(); i++ {
-			err := tryInRule(ruleVal, val.Index(i), name+"["+strconv.Itoa(i)+"]")
-			var valErr ValidationErrors
-			if err != nil {
-				if errors.As(err, &valErr) {
-					errs = append(errs, valErr...)
-				} else {
-					return err
-				}
-			}
-		}
-		if len(errs) > 0 {
-			return errs
-		}
-	} else if val.Type().Kind() == reflect.String {
+	switch val.Type().Kind() { //nolint:exhaustive
+	case reflect.Slice:
+		return validateSlice(ruleVal, val, name, tryInRule)
+	case reflect.String:
 		availableVals := strings.Split(ruleVal, ",")
 		if !stringInSlice(val.String(), availableVals) {
 			return ValidationErrors{ValidationError{
 				Field: name,
-				Err:   notInSetError,
+				Err:   ErrNotInSet,
 			}}
 		}
-	} else if val.Type().Kind() == reflect.Int {
+	case reflect.Int:
 		availableVals := strings.Split(ruleVal, ",")
 		availableInts := make([]int, len(availableVals))
 		for i := 0; i < len(availableVals); i++ {
 			value, err := strconv.Atoi(availableVals[i])
 			if err != nil {
-				return fmt.Errorf("field %s: %w caused by %s", name, ruleError, err)
+				return fmt.Errorf("field %s: %w caused by %s", name, ErrInvalidRule, err)
 			}
 			availableInts[i] = value
 		}
@@ -172,118 +154,99 @@ func tryInRule(ruleVal string, val reflect.Value, name string) error {
 		if !intInSlice(int(val.Int()), availableInts) {
 			return ValidationErrors{ValidationError{
 				Field: name,
-				Err:   notInSetError,
+				Err:   ErrNotInSet,
 			}}
 		}
-	} else {
-		return fmt.Errorf("field %s: %w", name, typeError)
+	default:
+		return fmt.Errorf("field %s: %w", name, ErrWrongType)
 	}
 
 	return nil
 }
 
 func tryMinRule(ruleVal string, val reflect.Value, name string) error {
-	var errs ValidationErrors
-	if val.Type().Kind() == reflect.Slice {
-		for i := 0; i < val.Len(); i++ {
-			err := tryMinRule(ruleVal, val.Index(i), name+"["+strconv.Itoa(i)+"]")
-			var valErr ValidationErrors
-			if err != nil {
-				if errors.As(err, &valErr) {
-					errs = append(errs, valErr...)
-				} else {
-					return err
-				}
-			}
-		}
-		if len(errs) > 0 {
-			return errs
-		}
-	} else if val.Type().Kind() == reflect.Int {
-		minVal, err := strconv.Atoi(ruleVal)
-		if err != nil {
-			return fmt.Errorf("field %s: %w caused by %s", name, ruleError, err)
-		}
-		if int(val.Int()) < minVal {
-			return ValidationErrors{ValidationError{
-				Field: name,
-				Err:   lessMinError,
-			}}
-		}
-	} else {
-		return fmt.Errorf("field %s: %w", name, typeError)
+	switch val.Type().Kind() { //nolint:exhaustive
+	case reflect.Slice:
+		return validateSlice(ruleVal, val, name, tryMinRule)
+	case reflect.Int:
+		return validateInt(ruleVal, int(val.Int()), name,
+			func(fVal int, checkVal int) bool {
+				return fVal < checkVal
+			},
+			ErrLessMin)
+	default:
+		return fmt.Errorf("field %s: %w", name, ErrWrongType)
 	}
-
-	return nil
 }
 
 func tryMaxRule(ruleVal string, val reflect.Value, name string) error {
-	var errs ValidationErrors
-	if val.Type().Kind() == reflect.Slice {
-		for i := 0; i < val.Len(); i++ {
-			err := tryMaxRule(ruleVal, val.Index(i), name+"["+strconv.Itoa(i)+"]")
-			var valErr ValidationErrors
-			if err != nil {
-				if errors.As(err, &valErr) {
-					errs = append(errs, valErr...)
-				} else {
-					return err
-				}
-			}
-		}
-		if len(errs) > 0 {
-			return errs
-		}
-	} else if val.Type().Kind() == reflect.Int {
-		maxVal, err := strconv.Atoi(ruleVal)
-		if err != nil {
-			return fmt.Errorf("field %s: %w caused by %s", name, ruleError, err)
-		}
-		if int(val.Int()) > maxVal {
-			return ValidationErrors{ValidationError{
-				Field: name,
-				Err:   greaterMaxError,
-			}}
-		}
-	} else {
-		return fmt.Errorf("field %s: %w", name, typeError)
+	switch val.Type().Kind() { //nolint:exhaustive
+	case reflect.Slice:
+		return validateSlice(ruleVal, val, name, tryMaxRule)
+	case reflect.Int:
+		return validateInt(ruleVal, int(val.Int()), name,
+			func(fVal int, checkVal int) bool {
+				return fVal > checkVal
+			},
+			ErrGreaterMax)
+	default:
+		return fmt.Errorf("field %s: %w", name, ErrWrongType)
 	}
-
-	return nil
 }
 
 func tryRegexpRule(ruleVal string, val reflect.Value, name string) error {
-	var errs ValidationErrors
-	if val.Type().Kind() == reflect.Slice {
-		for i := 0; i < val.Len(); i++ {
-			err := tryRegexpRule(ruleVal, val.Index(i), name+"["+strconv.Itoa(i)+"]")
-			var valErr ValidationErrors
-			if err != nil {
-				if errors.As(err, &valErr) {
-					errs = append(errs, valErr...)
-				} else {
-					return err
-				}
-			}
-		}
-		if len(errs) > 0 {
-			return errs
-		}
-	} else if val.Type().Kind() == reflect.String {
+	switch val.Type().Kind() { //nolint:exhaustive
+	case reflect.Slice:
+		return validateSlice(ruleVal, val, name, tryRegexpRule)
+	case reflect.String:
 		rEx, err := regexp.Compile(ruleVal)
 		if err != nil {
-			return fmt.Errorf("field %s: %w caused by %s", name, ruleError, err)
+			return fmt.Errorf("field %s: %w caused by %s", name, ErrInvalidRule, err)
 		}
 		if !rEx.Match([]byte(val.String())) {
 			return ValidationErrors{ValidationError{
 				Field: name,
-				Err:   regexpValidationError,
+				Err:   ErrRegExpMismatch,
 			}}
 		}
-	} else {
-		return fmt.Errorf("field %s: %w", name, typeError)
+	default:
+		return fmt.Errorf("field %s: %w", name, ErrWrongType)
 	}
 
+	return nil
+}
+
+func validateSlice(ruleVal string, val reflect.Value, name string, validator validationFn) error {
+	var errs ValidationErrors
+	for i := 0; i < val.Len(); i++ {
+		err := validator(ruleVal, val.Index(i), name+"["+strconv.Itoa(i)+"]")
+		var valErr ValidationErrors
+		if err != nil {
+			if errors.As(err, &valErr) {
+				errs = append(errs, valErr...)
+			} else {
+				return err
+			}
+		}
+	}
+	if len(errs) > 0 {
+		return errs
+	}
+	return nil
+}
+
+func validateInt(ruleValue string, fieldValue int, fieldName string,
+	check intCheckFn, possibleErr error) error {
+	checkVal, err := strconv.Atoi(ruleValue)
+	if err != nil {
+		return fmt.Errorf("field %s: %w caused by %s", fieldName, ErrInvalidRule, err)
+	}
+	if check(fieldValue, checkVal) {
+		return ValidationErrors{ValidationError{
+			Field: fieldName,
+			Err:   possibleErr,
+		}}
+	}
 	return nil
 }
 
