@@ -235,8 +235,13 @@ func validateSlice(ruleVal string, val reflect.Value, name string, validator val
 	return nil
 }
 
-func validateInt(ruleValue string, fieldValue int, fieldName string,
-	check intCheckFn, possibleErr error) error {
+func validateInt(
+	ruleValue string,
+	fieldValue int,
+	fieldName string,
+	check intCheckFn,
+	possibleErr error,
+) error {
 	checkVal, err := strconv.Atoi(ruleValue)
 	if err != nil {
 		return fmt.Errorf("field %s: %w caused by %s", fieldName, ErrInvalidRule, err)
