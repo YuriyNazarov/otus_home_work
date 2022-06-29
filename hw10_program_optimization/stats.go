@@ -1,7 +1,6 @@
 package hw10programoptimization
 
 import (
-	"fmt"
 	"github.com/valyala/fastjson"
 	"io"
 	"strings"
@@ -14,56 +13,83 @@ type User struct {
 type DomainStat map[string]int
 
 func GetDomainStat(r io.Reader, domain string) (DomainStat, error) {
-	u, count, err := getUsers(r)
-	if err != nil {
-		return nil, fmt.Errorf("get users error: %w", err)
-	}
-	return countDomains(u, count, domain)
+	userC, errC := getUsers(r)
+	return countDomains(userC, errC, domain)
 }
 
-type users [100_000]User
+func getUsers(r io.Reader) (<-chan User, <-chan error) {
+	linesC, errs := readLine(r)
+	usersChan := make(chan User, 10)
+	errChan := make(chan error)
 
-func getUsers(r io.Reader) (result users, usersCount int, err error) {
-	//content, err := ioutil.ReadAll(r)
-	content, err := read(r)
-	if err != nil {
-		return
-	}
-	var user User
-
-	lines := strings.Split(content, "\n")
-	var (
-		p   fastjson.Parser
-		val *fastjson.Value
-	)
-	for i, line := range lines {
-		val, err = p.Parse(line)
-		if err != nil {
-			return result, usersCount, err // так и не понял почему тут ругается компилятор если использовать возврат по имени. ./stats.go:46:4: err is shadowed during return
+	go func() {
+		var (
+			user User
+			p    fastjson.Parser
+			val  *fastjson.Value
+			err  error
+		)
+	LinesRead:
+		for {
+			select {
+			case line, ok := <-linesC:
+				if !ok {
+					close(errChan)
+					close(usersChan)
+					break LinesRead
+				}
+				val, err = p.Parse(line)
+				if err != nil {
+					errChan <- err
+					close(errChan)
+					close(usersChan)
+					break LinesRead
+				}
+				user.Email = string(val.GetStringBytes("Email"))
+				usersChan <- user
+			case err = <-errs:
+				if err != nil {
+					errChan <- err
+					close(errChan)
+					close(usersChan)
+				}
+			}
 		}
-		user.Email = string(val.GetStringBytes("Email"))
-		result[i] = user
-		usersCount++
-	}
-	return
+	}()
+	return usersChan, errChan
 }
 
-func countDomains(u users, usersCount int, domain string) (DomainStat, error) {
-	result := make(DomainStat, usersCount/16) // Не уверен является ли это читерством.
-	// Рассчет на то что не будет слишком много уникальных доменов подходящих под поиск.
-	// При превышении конечно же будут дополнительные аллокации памяти под мапу
-	var num int
-	for i := 0; i < usersCount; i++ {
-		if strings.HasSuffix(u[i].Email, domain) {
-			num = result[strings.ToLower(strings.SplitN(u[i].Email, "@", 2)[1])]
-			num++
-			result[strings.ToLower(strings.SplitN(u[i].Email, "@", 2)[1])] = num
+func countDomains(usersC <-chan User, errC <-chan error, domain string) (DomainStat, error) {
+	var (
+		num  int
+		err  error
+		ok   bool
+		user User
+	)
+	result := make(DomainStat, 100)
+
+UserRead:
+	for {
+		select {
+		case user, ok = <-usersC:
+			if !ok {
+				break UserRead
+			}
+			if strings.HasSuffix(user.Email, domain) {
+				num = result[strings.ToLower(strings.SplitN(user.Email, "@", 2)[1])]
+				num++
+				result[strings.ToLower(strings.SplitN(user.Email, "@", 2)[1])] = num
+			}
+		case err = <-errC:
+			if err != nil {
+				return DomainStat{}, err
+			}
 		}
 	}
 	return result, nil
 }
 
-func read(r io.Reader) (string, error) {
+func readLine(r io.Reader) (<-chan string, <-chan error) {
 	var (
 		err     error
 		read    int
@@ -71,17 +97,45 @@ func read(r io.Reader) (string, error) {
 	)
 	buf := make([]byte, bufSize) // буфер на 32кб
 	strBuf := strings.Builder{}
+	outChan := make(chan string, 10)
+	errChan := make(chan error)
 
-	for {
-		read, err = r.Read(buf)
-		if err != nil {
-			if err == io.EOF {
-				strBuf.Write(buf[:read])
-				return strBuf.String(), nil
+	go func() {
+		for {
+			read, err = r.Read(buf)
+			if err != nil {
+				if err == io.EOF {
+					for i := 0; i < read; i++ {
+						if buf[i] == '\n' {
+							outChan <- strBuf.String()
+							strBuf.Reset()
+							continue
+						}
+						strBuf.WriteByte(buf[i])
+					}
+
+					outChan <- strBuf.String()
+					close(outChan)
+					close(errChan)
+					break
+				} else {
+					errChan <- err
+					close(outChan)
+					close(errChan)
+					break
+				}
+
 			}
-			return "", err
+			for i := 0; i < read; i++ {
+				if buf[i] == '\n' {
+					outChan <- strBuf.String()
+					strBuf.Reset()
+					continue
+				}
+				strBuf.WriteByte(buf[i])
+			}
+			buf = make([]byte, bufSize)
 		}
-		strBuf.Write(buf[:read])
-		buf = make([]byte, bufSize)
-	}
+	}()
+	return outChan, errChan
 }

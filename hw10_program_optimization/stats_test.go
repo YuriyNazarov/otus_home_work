@@ -17,14 +17,6 @@ func TestGetDomainStat(t *testing.T) {
 {"Id":3,"Name":"Clarence Olson","Username":"RachelAdams","Email":"RoseSmith@Browsecat.com","Phone":"988-48-97","Password":"71kuz3gA5w","Address":"Monterey Park 39"}
 {"Id":4,"Name":"Gregory Reid","Username":"tButler","Email":"5Moore@Teklist.net","Phone":"520-04-16","Password":"r639qLNu","Address":"Sunfield Park 20"}
 {"Id":5,"Name":"Janice Rose","Username":"KeithHart","Email":"nulla@Linktype.com","Phone":"146-91-01","Password":"acSBF5","Address":"Russell Trail 61"}`
-	//todo temp
-	//t.Run("find 'co123m'", func(t *testing.T) {
-	//	result, err := readLines(bytes.NewBufferString(data))
-	//	fmt.Println(err)
-	//	for _, s := range result {
-	//		fmt.Println("str is:", s)
-	//	}
-	//})
 
 	t.Run("find 'com'", func(t *testing.T) {
 		result, err := GetDomainStat(bytes.NewBufferString(data), "com")
@@ -62,7 +54,20 @@ func BenchmarkGetUsers(b *testing.B) {
 	defer r.Close()
 	data, _ := r.File[0].Open()
 	for i := 0; i < b.N; i++ {
-		getUsers(data)
+		uC, eC := getUsers(data)
+	L:
+		for {
+			select {
+			case _, ok := <-uC:
+				if !ok {
+					break L
+				}
+			case err := <-eC:
+				if err != nil {
+					break L
+				}
+			}
+		}
 	}
 }
 
@@ -70,8 +75,9 @@ func BenchmarkCountDomains(b *testing.B) {
 	r, _ := zip.OpenReader("testdata/users.dat.zip")
 	defer r.Close()
 	data, _ := r.File[0].Open()
-	users, cnt, _ := getUsers(data)
+	usersC, errC := getUsers(data)
 	for i := 0; i < b.N; i++ {
-		countDomains(users, cnt, "biz")
+		_, err := countDomains(usersC, errC, "biz")
+		require.NoError(b, err)
 	}
 }
