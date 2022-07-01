@@ -1,9 +1,13 @@
 package hw10programoptimization
 
 import (
-	"github.com/valyala/fastjson"
+	"bufio"
+	"bytes"
+	"errors"
 	"io"
 	"strings"
+
+	"github.com/valyala/fastjson"
 )
 
 type User struct {
@@ -12,13 +16,15 @@ type User struct {
 
 type DomainStat map[string]int
 
+var errInvalidJSON = errors.New("error occupied on parsing json")
+
 func GetDomainStat(r io.Reader, domain string) (DomainStat, error) {
-	userC, errC := getUsers(r)
+	userC, errC := getUsers(r, domain)
 	return countDomains(userC, errC, domain)
 }
 
-func getUsers(r io.Reader) (<-chan User, <-chan error) {
-	linesC, errs := readLine(r)
+func getUsers(r io.Reader, domain string) (<-chan User, <-chan error) {
+	linesC := readLine(r, domain)
 	usersChan := make(chan User, 10)
 	errChan := make(chan error)
 
@@ -31,37 +37,26 @@ func getUsers(r io.Reader) (<-chan User, <-chan error) {
 		)
 	LinesRead:
 		for {
-			select {
-			case line, ok := <-linesC:
-				if !ok {
-					close(errChan)
-					close(usersChan)
-					break LinesRead
-				}
-				val, err = p.Parse(line)
-				if err != nil {
-					errChan <- err
-					close(errChan)
-					close(usersChan)
-					break LinesRead
-				}
-				user.Email = string(val.GetStringBytes("Email"))
-				usersChan <- user
-			case err = <-errs:
-				if err != nil {
-					errChan <- err
-					close(errChan)
-					close(usersChan)
-				}
+			line, ok := <-linesC
+			if !ok {
+				break LinesRead
 			}
+			val, err = p.Parse(line)
+			if err != nil {
+				errChan <- errInvalidJSON
+				break LinesRead
+			}
+			user.Email = string(val.GetStringBytes("Email"))
+			usersChan <- user
 		}
+		close(usersChan)
+		close(errChan)
 	}()
 	return usersChan, errChan
 }
 
 func countDomains(usersC <-chan User, errC <-chan error, domain string) (DomainStat, error) {
 	var (
-		num  int
 		err  error
 		ok   bool
 		user User
@@ -76,10 +71,9 @@ UserRead:
 				break UserRead
 			}
 			if strings.HasSuffix(user.Email, domain) {
-				num = result[strings.ToLower(strings.SplitN(user.Email, "@", 2)[1])]
-				num++
-				result[strings.ToLower(strings.SplitN(user.Email, "@", 2)[1])] = num
+				result[strings.ToLower(strings.SplitN(user.Email, "@", 2)[1])]++
 			}
+
 		case err = <-errC:
 			if err != nil {
 				return DomainStat{}, err
@@ -89,53 +83,18 @@ UserRead:
 	return result, nil
 }
 
-func readLine(r io.Reader) (<-chan string, <-chan error) {
-	var (
-		err     error
-		read    int
-		bufSize = 1 << 15
-	)
-	buf := make([]byte, bufSize) // буфер на 32кб
-	strBuf := strings.Builder{}
+func readLine(r io.Reader, domain string) <-chan string {
 	outChan := make(chan string, 10)
-	errChan := make(chan error)
-
+	scanner := bufio.NewScanner(r)
+	scanner.Split(bufio.ScanLines)
 	go func() {
-		for {
-			read, err = r.Read(buf)
-			if err != nil {
-				if err == io.EOF {
-					for i := 0; i < read; i++ {
-						if buf[i] == '\n' {
-							outChan <- strBuf.String()
-							strBuf.Reset()
-							continue
-						}
-						strBuf.WriteByte(buf[i])
-					}
-
-					outChan <- strBuf.String()
-					close(outChan)
-					close(errChan)
-					break
-				} else {
-					errChan <- err
-					close(outChan)
-					close(errChan)
-					break
-				}
-
+		for scanner.Scan() {
+			if !bytes.Contains(scanner.Bytes(), []byte(domain)) {
+				continue
 			}
-			for i := 0; i < read; i++ {
-				if buf[i] == '\n' {
-					outChan <- strBuf.String()
-					strBuf.Reset()
-					continue
-				}
-				strBuf.WriteByte(buf[i])
-			}
-			buf = make([]byte, bufSize)
+			outChan <- string(scanner.Bytes())
 		}
+		close(outChan)
 	}()
-	return outChan, errChan
+	return outChan
 }
