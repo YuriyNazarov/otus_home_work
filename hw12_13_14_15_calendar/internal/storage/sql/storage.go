@@ -11,7 +11,7 @@ import (
 	"github.com/YuriyNazarov/otus_home_work/hw12_13_14_15_calendar/internal/logger"
 	"github.com/YuriyNazarov/otus_home_work/hw12_13_14_15_calendar/internal/storage"
 	_ "github.com/lib/pq" // Postgres driver
-	"github.com/pressly/goose/v3"
+	goose "github.com/pressly/goose/v3"
 	uuid "github.com/satori/go.uuid"
 )
 
