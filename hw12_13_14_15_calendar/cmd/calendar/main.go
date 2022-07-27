@@ -3,21 +3,25 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
+	"log"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
-	"github.com/fixme_my_friend/hw12_13_14_15_calendar/internal/app"
-	"github.com/fixme_my_friend/hw12_13_14_15_calendar/internal/logger"
-	internalhttp "github.com/fixme_my_friend/hw12_13_14_15_calendar/internal/server/http"
-	memorystorage "github.com/fixme_my_friend/hw12_13_14_15_calendar/internal/storage/memory"
+	"github.com/YuriyNazarov/otus_home_work/hw12_13_14_15_calendar/internal/app"
+	"github.com/YuriyNazarov/otus_home_work/hw12_13_14_15_calendar/internal/logger"
+	internalhttp "github.com/YuriyNazarov/otus_home_work/hw12_13_14_15_calendar/internal/server/http"
+	memorystorage "github.com/YuriyNazarov/otus_home_work/hw12_13_14_15_calendar/internal/storage/memory"
+	dbstorage "github.com/YuriyNazarov/otus_home_work/hw12_13_14_15_calendar/internal/storage/sql"
 )
 
 var configFile string
 
 func init() {
-	flag.StringVar(&configFile, "config", "/etc/calendar/config.toml", "Path to configuration file")
+	flag.StringVar(&configFile, "config", "../../configs/config.example.json", "Path to configuration file")
 }
 
 func main() {
@@ -28,13 +32,34 @@ func main() {
 		return
 	}
 
-	config := NewConfig()
-	logg := logger.New(config.Logger.Level)
+	config, err := NewConfig(configFile)
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	storage := memorystorage.New()
+	logg := logger.NewLogger(config.Logger.Level, config.Logger.Destination)
+	defer logg.Close()
+
+	var storage app.Storage
+	if config.MemoryStorage {
+		storage = memorystorage.New(*logg)
+	} else {
+		storage = dbstorage.New(
+			*logg,
+			config.Database.Host,
+			config.Database.Port,
+			config.Database.User,
+			config.Database.Password,
+			config.Database.Name,
+		)
+	}
+	defer storage.Close()
 	calendar := app.New(logg, storage)
 
-	server := internalhttp.NewServer(logg, calendar)
+	servLogger, err := logger.NewServerLogger("../../server.log")
+	fmt.Println(err)
+	defer servLogger.Close()
+	server := internalhttp.NewServer(*servLogger, calendar, config.Server.Host+":"+strconv.Itoa(config.Server.Port))
 
 	ctx, cancel := signal.NotifyContext(context.Background(),
 		syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
@@ -43,7 +68,7 @@ func main() {
 	go func() {
 		<-ctx.Done()
 
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 		defer cancel()
 
 		if err := server.Stop(ctx); err != nil {
