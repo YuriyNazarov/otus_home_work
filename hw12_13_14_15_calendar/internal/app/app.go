@@ -10,7 +10,7 @@ import (
 
 type App struct {
 	logg    Logger
-	storage storage.EventRepository
+	storage Storage
 }
 
 type Logger interface {
@@ -18,6 +18,10 @@ type Logger interface {
 	Info(msg string)
 	Warn(msg string)
 	Error(msg string)
+}
+
+type Storage interface {
+	storage.EventRepository
 }
 
 func New(logger Logger, storage storage.EventRepository) *App {
