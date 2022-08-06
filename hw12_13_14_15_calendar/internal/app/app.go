@@ -10,7 +10,7 @@ import (
 
 type App struct {
 	logg    Logger
-	storage Storage
+	storage storage.EventRepository
 }
 
 type Logger interface {
@@ -20,11 +20,7 @@ type Logger interface {
 	Error(msg string)
 }
 
-type Storage interface {
-	storage.EventRepository
-}
-
-func New(logger Logger, storage Storage) *App {
+func New(logger Logger, storage storage.EventRepository) *App {
 	return &App{
 		logg:    logger,
 		storage: storage,
