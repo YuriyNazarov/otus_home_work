@@ -6,16 +6,16 @@ import (
 )
 
 type Event struct {
-	ID              string
-	Title           string
-	Description     string
-	Start           time.Time
-	End             time.Time
-	OwnerID         int
-	RemindBefore    time.Duration
+	ID              string        `json:"id"`
+	Title           string        `json:"title"`
+	Description     string        `json:"description"`
+	Start           time.Time     `json:"start"`
+	End             time.Time     `json:"end"`
+	OwnerID         int           `json:"ownerId"`
+	RemindBefore    time.Duration `json:"remindBefore"`
 	IntRemindBefore int64
-	RemindSent      bool
-	RemindReceived  bool
+	RemindSent      bool `json:"remindSent"`
+	RemindReceived  bool `json:"remindReceived"`
 }
 
 var (
@@ -23,7 +23,6 @@ var (
 	ErrDateOverlap      = errors.New("event overlaps with another event")
 	ErrEventDataMissing = errors.New("some required field of event are not filled")
 	ErrConnFailed       = errors.New("database connection is dead")
-	ErrMigrationFailed  = errors.New("db startup migration failed")
 	ErrDBOperationFail  = errors.New("something went wrong on DB operation")
 )
 
