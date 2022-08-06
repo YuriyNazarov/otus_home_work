@@ -21,7 +21,12 @@ type Logger interface {
 }
 
 type Storage interface {
-	storage.EventRepository
+	AddEvent(event *storage.Event) error
+	UpdateEvent(event storage.Event) error
+	DeleteEvent(event storage.Event) error
+	ListEvents(from time.Time, to time.Time, ownerID int) ([]storage.Event, error)
+	GetByID(id string) (storage.Event, error)
+	Close() error
 }
 
 func New(logger Logger, storage storage.EventRepository) *App {
