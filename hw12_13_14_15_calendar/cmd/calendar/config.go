@@ -3,7 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"os"
 	"path/filepath"
 )
@@ -38,13 +38,16 @@ type ServerConf struct {
 
 func NewConfig(confPath string) (Config, error) {
 	config := Config{}
-	pwd, _ := os.Getwd()
+	pwd, err := os.Getwd()
+	if err != nil {
+		return config, fmt.Errorf("could not open config file: %w", err)
+	}
 	confPath = filepath.Join(pwd, confPath)
 	file, err := os.Open(confPath)
 	if err != nil {
 		return config, fmt.Errorf("could not open config file: %w", err)
 	}
-	rawCfg, err := ioutil.ReadAll(file)
+	rawCfg, err := io.ReadAll(file)
 	if err != nil {
 		return config, fmt.Errorf("could not parse config, %w", err)
 	}

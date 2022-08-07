@@ -19,7 +19,10 @@ func (s *Storage) AddEvent(event *storage.Event) error {
 	if !event.IsRequiredFilled() {
 		return storage.ErrEventDataMissing
 	}
-	exEvents, _ := s.ListEvents(event.Start, event.End, event.OwnerID)
+	exEvents, err := s.ListEvents(event.Start, event.End, event.OwnerID)
+	if err != nil {
+		return err
+	}
 	if len(exEvents) > 0 {
 		return storage.ErrDateOverlap
 	}
@@ -94,6 +97,8 @@ func New(log logger.Logger) *Storage {
 }
 
 func (s *Storage) Close() error {
+	s.mu.Lock()
 	s.events = make(map[string]storage.Event)
+	s.mu.Unlock()
 	return nil
 }
