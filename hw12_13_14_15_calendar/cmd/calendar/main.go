@@ -13,6 +13,7 @@ import (
 
 	"github.com/YuriyNazarov/otus_home_work/hw12_13_14_15_calendar/internal/app"
 	"github.com/YuriyNazarov/otus_home_work/hw12_13_14_15_calendar/internal/logger"
+	internalgrpc "github.com/YuriyNazarov/otus_home_work/hw12_13_14_15_calendar/internal/server/grpc"
 	internalhttp "github.com/YuriyNazarov/otus_home_work/hw12_13_14_15_calendar/internal/server/http"
 	memorystorage "github.com/YuriyNazarov/otus_home_work/hw12_13_14_15_calendar/internal/storage/memory"
 	dbstorage "github.com/YuriyNazarov/otus_home_work/hw12_13_14_15_calendar/internal/storage/sql"
@@ -56,14 +57,33 @@ func main() {
 	defer storage.Close()
 	calendar := app.New(logg, storage)
 
-	servLogger, err := logger.NewServerLogger("../../server.log")
-	fmt.Println(err)
-	defer servLogger.Close()
-	server := internalhttp.NewServer(*servLogger, calendar, config.Server.Host+":"+strconv.Itoa(config.Server.Port))
-
 	ctx, cancel := signal.NotifyContext(context.Background(),
 		syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
 	defer cancel()
+
+	// gRPC
+	serverGrpc := internalgrpc.NewServer(logg, calendar, config.Server.Grpc.Host, config.Server.Grpc.Port)
+
+	go func() {
+		if err := serverGrpc.Start(); err != nil {
+			logg.Error("failed to start grpc server: " + err.Error())
+		}
+	}()
+
+	go func() {
+		<-ctx.Done()
+		serverGrpc.Stop()
+	}()
+
+	// http
+	servLogger, err := logger.NewServerLogger("../../server.log")
+	if err != nil {
+		logg.Error(fmt.Sprintf("failed creating http server: %s", err))
+	}
+
+	defer servLogger.Close()
+	server := internalhttp.NewServer(*servLogger, calendar, config.Server.HTTP.Host+
+		":"+strconv.Itoa(config.Server.HTTP.Port))
 
 	go func() {
 		<-ctx.Done()

@@ -3,7 +3,7 @@
     "logLevel": "debug",
     "destination": "STDERR"
   },
-  "memoryStorage": true,
+  "memoryStorage": false,
   "database": {
     "host": "localhost",
     "port": 5432,
@@ -12,7 +12,13 @@
     "dbName": "calendar_data"
   },
   "server": {
-    "host": "localhost",
-    "port": 8080
+    "http": {
+      "host": "localhost",
+      "port": 8080
+    },
+    "grpc": {
+      "host": "localhost",
+      "port": 50051
+    }
   }
 }

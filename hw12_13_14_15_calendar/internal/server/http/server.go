@@ -3,6 +3,9 @@ package internalhttp
 import (
 	"context"
 	"net/http"
+	"time"
+
+	"github.com/YuriyNazarov/otus_home_work/hw12_13_14_15_calendar/internal/storage"
 )
 
 type Server struct {
@@ -16,7 +19,28 @@ type Logger interface {
 	Info(ip, method, path, protocol string, respCode int, latency, userAgent string)
 }
 
-type Application interface { // TODO
+type Application interface {
+	CreateEvent(
+		ctx context.Context,
+		title,
+		description string,
+		start,
+		end time.Time,
+		ownerID int,
+		remindBefore time.Duration,
+	) (string, error)
+	GetByID(ID string) (storage.Event, error)
+	UpdateEvent(
+		ctx context.Context,
+		ID,
+		title,
+		description string,
+		start,
+		end time.Time,
+		remindBefore time.Duration,
+	) error
+	DeleteEvent(ID string) error
+	GetList(day time.Time, interval string) ([]storage.Event, error)
 }
 
 func NewServer(logger Logger, app Application, addr string) *Server {
@@ -25,12 +49,10 @@ func NewServer(logger Logger, app Application, addr string) *Server {
 		app:    app,
 		addr:   addr,
 	}
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", server.hello)
-
+	mux := NewMux(app)
 	server.server = &http.Server{
 		Addr:    addr,
-		Handler: loggingMiddleware(mux, logger),
+		Handler: loggingMiddleware(mux.mux, logger),
 	}
 	return server
 }
@@ -47,9 +69,4 @@ func (s *Server) Start(ctx context.Context) error {
 func (s *Server) Stop(ctx context.Context) error {
 	s.server.Close()
 	return nil
-}
-
-func (s *Server) hello(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("Hello world"))
 }

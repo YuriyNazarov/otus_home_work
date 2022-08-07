@@ -32,8 +32,13 @@ type DBConf struct {
 }
 
 type ServerConf struct {
-	Host string
-	Port int
+	HTTP Connection `json:"http"`
+	Grpc Connection `json:"grpc"`
+}
+
+type Connection struct {
+	Host string `json:"host"`
+	Port int    `json:"port"`
 }
 
 func NewConfig(confPath string) (Config, error) {

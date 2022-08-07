@@ -109,9 +109,18 @@ func (s *Storage) listEventsExclude(
 	excludeID string,
 ) ([]storage.Event, error) {
 	query := "select id, title, description, owner_id, start, \"end\", remind_before, remind_sent, remind_received" +
-		" from events where ((\"start\" >= $1 and \"start\" <= $2) or (\"end\" >= $1 and \"end\" <= $2)) " +
-		"and owner_id = $3 and id != $4"
-	rows, err := s.db.Query(query, from, to, ownerID, excludeID)
+		" from events where ((\"start\" >= $1 and \"start\" <= $2) or (\"end\" >= $1 and \"end\" <= $2)) and id != $3"
+	var (
+		err  error
+		rows *sql.Rows
+	)
+	if ownerID != 0 {
+		query += " and owner_id = $4"
+		rows, err = s.db.Query(query, from, to, excludeID, ownerID)
+	} else {
+		rows, err = s.db.Query(query, from, to, excludeID)
+	}
+
 	var events []storage.Event
 	if err != nil {
 		return events, err
@@ -210,6 +219,6 @@ func (s *Storage) Close() error {
 
 func (s *Storage) migrate() error {
 	pwd, _ := os.Getwd()
-	migrPath := filepath.Join(pwd, "migrations")
+	migrPath := filepath.Join(pwd, "../migrations")
 	return goose.Up(s.db, migrPath)
 }
