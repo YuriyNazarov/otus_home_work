@@ -196,8 +196,8 @@ func New(l logger.Logger, host string, port int, user, password, dbName string) 
 
 func (s *Storage) Connect(host string, port int, user, password, dbName string) error {
 	s.log.Debug("connect DB")
-	connection := "postgres://" + user + ":" + password + "@" +
-		host + ":" + strconv.Itoa(port) + "/" + dbName + "?sslmode=disable"
+	connection := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable",
+		user, password, host, strconv.Itoa(port), dbName)
 
 	db, err := sql.Open("postgres", connection)
 	if err != nil {

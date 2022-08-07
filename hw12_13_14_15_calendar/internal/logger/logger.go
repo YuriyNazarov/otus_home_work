@@ -68,5 +68,6 @@ func (l Logger) Debug(msg string) {
 }
 
 func (l *Logger) Close() error {
+
 	return l.output.Close()
 }
