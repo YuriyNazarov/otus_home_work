@@ -35,6 +35,12 @@ type EventRepository interface {
 	Close() error
 }
 
+type NotificationsStorage interface {
+	GetEventsToNotify() ([]Event, error)
+	DropOldEvents() error
+	SetNotifiedFlag(event Event) error
+}
+
 func (event Event) IsRequiredFilled() bool {
 	return event.Title != "" && event.Start != time.Time{} && event.End != time.Time{} && event.OwnerID != 0
 }

@@ -12,11 +12,11 @@ import (
 	"time"
 
 	"github.com/YuriyNazarov/otus_home_work/hw12_13_14_15_calendar/internal/app"
+	internalconfig "github.com/YuriyNazarov/otus_home_work/hw12_13_14_15_calendar/internal/config"
 	"github.com/YuriyNazarov/otus_home_work/hw12_13_14_15_calendar/internal/logger"
 	internalgrpc "github.com/YuriyNazarov/otus_home_work/hw12_13_14_15_calendar/internal/server/grpc"
 	internalhttp "github.com/YuriyNazarov/otus_home_work/hw12_13_14_15_calendar/internal/server/http"
-	memorystorage "github.com/YuriyNazarov/otus_home_work/hw12_13_14_15_calendar/internal/storage/memory"
-	dbstorage "github.com/YuriyNazarov/otus_home_work/hw12_13_14_15_calendar/internal/storage/sql"
+	internalstorage "github.com/YuriyNazarov/otus_home_work/hw12_13_14_15_calendar/internal/storage/factory"
 )
 
 var configFile string
@@ -33,7 +33,7 @@ func main() {
 		return
 	}
 
-	config, err := NewConfig(configFile)
+	config, err := internalconfig.NewConfig(configFile)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -41,19 +41,7 @@ func main() {
 	logg := logger.NewLogger(config.Logger.Level, config.Logger.Destination)
 	defer logg.Close()
 
-	var storage app.Storage
-	if config.MemoryStorage {
-		storage = memorystorage.New(*logg)
-	} else {
-		storage = dbstorage.New(
-			*logg,
-			config.Database.Host,
-			config.Database.Port,
-			config.Database.User,
-			config.Database.Password,
-			config.Database.Name,
-		)
-	}
+	storage := internalstorage.New(config.Storage, *logg)
 	defer storage.Close()
 	calendar := app.New(logg, storage)
 

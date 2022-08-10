@@ -5,6 +5,7 @@ go 1.16
 require (
 	github.com/lib/pq v1.10.6
 	github.com/pressly/goose/v3 v3.6.1
+	github.com/rabbitmq/amqp091-go v1.4.0
 	github.com/satori/go.uuid v1.2.0
 	github.com/stretchr/testify v1.7.2
 	golang.org/x/net v0.0.0-20220728211354-c7608f3a8462 // indirect

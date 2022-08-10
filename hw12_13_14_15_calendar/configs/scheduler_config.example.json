@@ -13,14 +13,13 @@
       "dbName": "calendar_data"
     }
   },
-  "server": {
-    "http": {
-      "host": "localhost",
-      "port": 8080
-    },
-    "grpc": {
-      "host": "localhost",
-      "port": 50051
-    }
+  "reminds": {
+    "remind_period": "1m",
+    "clear_period": "1h"
+  },
+  "queue": {
+    "dsn": "amqp://guest:guest@localhost:5672/",
+    "exchange": "calendar",
+    "queue": "calendar_q"
   }
 }

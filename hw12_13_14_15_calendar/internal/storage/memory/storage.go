@@ -15,6 +15,42 @@ type Storage struct {
 	log    logger.Logger
 }
 
+func (s *Storage) SetNotifiedFlag(event storage.Event) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	exEvent, ok := s.events[event.ID]
+	if !ok {
+		return storage.ErrEventNotFound
+	}
+	exEvent.RemindSent = true
+	s.events[event.ID] = exEvent
+	return nil
+}
+
+func (s *Storage) GetEventsToNotify() ([]storage.Event, error) {
+	var eventsToNotify []storage.Event
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, event := range s.events {
+		if !event.RemindSent && event.RemindBefore.Seconds() > 0 &&
+			event.Start.Add(event.RemindBefore*-1).Before(time.Now()) {
+			eventsToNotify = append(eventsToNotify, event)
+		}
+	}
+	return eventsToNotify, nil
+}
+
+func (s *Storage) DropOldEvents() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, event := range s.events {
+		if event.Start.Before(time.Now().Add(-1 * time.Hour * 24 * 365)) {
+			delete(s.events, event.ID)
+		}
+	}
+	return nil
+}
+
 func (s *Storage) AddEvent(event *storage.Event) error {
 	if !event.IsRequiredFilled() {
 		return storage.ErrEventDataMissing
