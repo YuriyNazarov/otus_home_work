@@ -1,0 +1,11 @@
+{
+  "logger": {
+    "logLevel": "debug",
+    "destination": "STDERR"
+  },
+  "queue": {
+    "dsn": "amqp://guest:guest@localhost:5672/",
+    "exchange": "calendar",
+    "queue": "calendar_q"
+  }
+}

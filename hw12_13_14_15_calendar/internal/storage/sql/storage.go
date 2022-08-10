@@ -20,6 +20,62 @@ type Storage struct {
 	log logger.Logger
 }
 
+func (s *Storage) SetNotifiedFlag(event storage.Event) error {
+	query := "update events set remind_sent = true where id = $1"
+	_, err := s.db.Exec(query, event.ID)
+	if err != nil {
+		s.log.Error(fmt.Sprintf("setting remind_sent on event failed: %s", err))
+		return storage.ErrDBOperationFail
+	}
+	return nil
+}
+
+func (s *Storage) GetEventsToNotify() ([]storage.Event, error) {
+	query := "select id, title, description, owner_id, \"start\", \"end\", remind_before, remind_sent, remind_received" +
+		" from events where remind_sent = false and remind_at < $1 and remind_at < \"start\""
+	var events []storage.Event
+	rows, err := s.db.Query(query, time.Now())
+	if err != nil {
+		s.log.Error(fmt.Sprintf("err on query rows: %s", err))
+		return events, storage.ErrDBOperationFail
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var event storage.Event
+		err := rows.Scan(
+			&event.ID,
+			&event.Title,
+			&event.Description,
+			&event.OwnerID,
+			&event.Start,
+			&event.End,
+			&event.IntRemindBefore,
+			&event.RemindSent,
+			&event.RemindReceived,
+		)
+		if err != nil {
+			s.log.Error(fmt.Sprintf("err on scanning rows: %s", err))
+			continue
+		}
+		event.RemindBefore = time.Duration(event.IntRemindBefore)
+		events = append(events, event)
+	}
+	if rows.Err() != nil {
+		s.log.Error(fmt.Sprintf("err on scanning rows: %s", err))
+	}
+	return events, nil
+}
+
+func (s *Storage) DropOldEvents() error {
+	query := "delete from events where \"start\" < $1"
+	_, err := s.db.Exec(query, time.Now().Add(-1*24*365*time.Hour))
+	if err != nil {
+		s.log.Error(fmt.Sprintf("deleting old events failed: %s", err))
+		return storage.ErrDBOperationFail
+	}
+	return nil
+}
+
 func (s *Storage) AddEvent(event *storage.Event) error {
 	if !event.IsRequiredFilled() {
 		return storage.ErrEventDataMissing
@@ -29,8 +85,8 @@ func (s *Storage) AddEvent(event *storage.Event) error {
 		return storage.ErrDateOverlap
 	}
 	event.ID = uuid.NewV4().String()
-	query := "insert into events (id, title, description, owner_id, start, \"end\", remind_before)  values" +
-		" ($1, $2, $3, $4, $5, $6, $7)"
+	query := "insert into events (id, title, description, owner_id, start, \"end\", remind_before, remind_at)  values" +
+		" ($1, $2, $3, $4, $5, $6, $7, $8)"
 	_, err := s.db.Exec(
 		query,
 		event.ID,
@@ -40,6 +96,7 @@ func (s *Storage) AddEvent(event *storage.Event) error {
 		event.Start,
 		event.End,
 		event.RemindBefore.Nanoseconds(),
+		event.Start.Add(-1*event.RemindBefore),
 	)
 	if err != nil {
 		s.log.Error(fmt.Sprintf("adding event failed: %s", err))
@@ -66,7 +123,8 @@ func (s *Storage) UpdateEvent(event storage.Event) error {
 		" remind_before = $6," +
 		" remind_sent = $7," +
 		" remind_received= $8" +
-		" where id = $9"
+		" remind_at = $9" +
+		" where id = $10"
 	_, err := s.db.Exec(
 		query,
 		event.Title,
@@ -77,6 +135,7 @@ func (s *Storage) UpdateEvent(event storage.Event) error {
 		event.RemindBefore.Nanoseconds(),
 		event.RemindSent,
 		event.RemindReceived,
+		event.Start.Add(-1*event.RemindBefore),
 		event.ID,
 	)
 	if err != nil {
@@ -218,7 +277,10 @@ func (s *Storage) Close() error {
 }
 
 func (s *Storage) migrate() error {
-	pwd, _ := os.Getwd()
-	migrPath := filepath.Join(pwd, "../migrations")
+	pwd, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+	migrPath := filepath.Join(pwd, "./migrations")
 	return goose.Up(s.db, migrPath)
 }
